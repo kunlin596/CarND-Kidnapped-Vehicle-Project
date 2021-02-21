@@ -77,8 +77,8 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
   }
 }
 
-void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
-                                     vector<LandmarkObs>& observations) {
+vector<LandmarkObs> ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
+                                                    vector<LandmarkObs>& observations) {
   /**
    * TODO: Find the predicted measurement that is closest to each 
    *   observed measurement and assign the observed measurement to this 
@@ -88,6 +88,24 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    *   during the updateWeights phase.
    */
 
+  vector<LandmarkObs> result;
+  for (auto &obs : observations) {
+    int closest = -1;
+    double minDist = std::numeric_limits<double>::infinity();
+    for (int i = 0; i < predicted.size(); ++i) {
+      double dist = std::sqrt(std::pow(predicted[i].x - obs.x, 2) +
+                              std::pow(predicted[i].y - obs.y, 2));
+      if (dist < minDist) {
+        minDist = dist;
+        closest = i;
+      }
+    }
+    if (closest != -1) {
+      result.push_back(predicted[closest]);
+      predicted.erase(predicted.begin() + closest);
+    }
+  }
+  return result;
 }
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
