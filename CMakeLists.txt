@@ -24,9 +24,10 @@ link_directories(/usr/local/Cellar/libuv/1*/lib)
 
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") 
 
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Boost COMPONENTS log)
 
 add_executable(particle_filter ${sources})
 
-
-target_link_libraries(particle_filter z ssl uv uWS)
+target_link_libraries(particle_filter z ssl uv uWS Eigen3::Eigen Boost::log)
 
