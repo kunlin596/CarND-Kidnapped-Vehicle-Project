@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include "helper_functions.h"
+#include <eigen3/Eigen/Dense>
 
 struct Particle {
   int id;
@@ -63,8 +64,8 @@ class ParticleFilter {
    * @param predicted Vector of predicted landmark observations
    * @param observations Vector of landmark observations
    */
-  static std::vector<LandmarkObs> dataAssociation(std::vector<LandmarkObs> predicted,
-                                                  std::vector<LandmarkObs>& observations);
+  void dataAssociation(const std::vector<LandmarkObs> &predictedInWorld,
+                       const std::vector<LandmarkObs> &observations);
   
   /**
    * updateWeights Updates the weights for each particle based on the likelihood
@@ -91,14 +92,14 @@ class ParticleFilter {
    * This can be a very useful debugging tool to make sure transformations 
    *   are correct and assocations correctly connected
    */
-  void SetAssociations(Particle& particle, const std::vector<int>& associations,
+  void setAssociations(Particle& particle, const std::vector<int>& associations,
                        const std::vector<double>& sense_x, 
                        const std::vector<double>& sense_y);
 
   /**
    * initialized Returns whether particle filter is initialized yet or not.
    */
-  const bool initialized() const {
+  bool initialized() const {
     return is_initialized;
   }
 
