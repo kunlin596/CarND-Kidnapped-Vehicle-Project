@@ -6,6 +6,7 @@
 #include "particle_filter.h"
 #include <boost/log/trivial.hpp>
 #include <boost/format.hpp>
+#include <Eigen/Dense>
 
 // for convenience
 using nlohmann::json;
@@ -50,7 +51,7 @@ int main() {
   ParticleFilter pf;
 
   h.onMessage([&pf,&map,&delta_t,&sensor_range,&sigma_pos,&sigma_landmark]
-              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, 
+              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -62,7 +63,7 @@ int main() {
         auto j = json::parse(s);
 
         string event = j[0].get<string>();
-        
+
         if (event == "telemetry") {
           // j[1] is the data JSON object
           if (!pf.initialized()) {
@@ -74,7 +75,7 @@ int main() {
 
             pf.init(sense_x, sense_y, sense_theta, sigma_pos);
           } else {
-            // Predict the vehicle's next state from previous 
+            // Predict the vehicle's next state from previous
             //   (noiseless control) data.
             double previous_velocity = std::stod(j[1]["previous_velocity"].get<string>());
             double previous_yawrate = std::stod(j[1]["previous_yawrate"].get<string>());
@@ -83,8 +84,8 @@ int main() {
           }
 
           // receive noisy observation data from the simulator
-          // sense_observations in JSON format 
-          //   [{obs_x,obs_y},{obs_x,obs_y},...{obs_x,obs_y}] 
+          // sense_observations in JSON format
+          //   [{obs_x,obs_y},{obs_x,obs_y},...{obs_x,obs_y}]
           vector<LandmarkObs> noisy_observations;
           string sense_observations_x = j[1]["sense_observations_x"];
           string sense_observations_y = j[1]["sense_observations_y"];
@@ -115,7 +116,7 @@ int main() {
           pf.updateWeights(sensor_range, sigma_landmark, noisy_observations, map);
           pf.resample();
 
-          // Calculate and output the average weighted error of the particle 
+          // Calculate and output the average weighted error of the particle
           //   filter over all time steps so far.
           vector<Particle> particles = pf.particles;
           int num_particles = particles.size();
@@ -133,19 +134,34 @@ int main() {
 
           BOOST_LOG_TRIVIAL(info) << (boost::format("highest w: %.3f, average w: %.3f") % highest_weight % (weight_sum / num_particles)).str();
 
+          // Set data association for visualization
+          const Eigen::Isometry2d Tcar2world = getIsometry2d(best_particle.x, best_particle.y, best_particle.theta);
+
+          // FIXME: sense_x and sense_y visualization is not working
+          // vector<double> sense_x;
+          // vector<double> sense_y;
+          // for (const auto &o : noisy_observations) {
+          //   Eigen::Vector2d obsInWorld = (Tcar2world * Eigen::Vector2d(o.x, o.y).homogeneous()).topRows<2>();
+          //   sense_x.push_back(obsInWorld.x());
+          //   sense_y.push_back(obsInWorld.y());
+          // }
+
+          // BOOST_LOG_TRIVIAL(debug) << "Draw best observation";
+          // pf.setAssociations(best_particle, best_particle.associations, sense_x, sense_y);
+
           json msgJson;
           msgJson["best_particle_x"] = best_particle.x;
           msgJson["best_particle_y"] = best_particle.y;
           msgJson["best_particle_theta"] = best_particle.theta;
 
-          // Optional message data used for debugging particle's sensing 
+          // Optional message data used for debugging particle's sensing
           //   and associations
           msgJson["best_particle_associations"] = pf.getAssociations(best_particle);
           msgJson["best_particle_sense_x"] = pf.getSenseCoord(best_particle, "X");
           msgJson["best_particle_sense_y"] = pf.getSenseCoord(best_particle, "Y");
 
           auto msg = "42[\"best_particle\"," + msgJson.dump() + "]";
-          // std::cout << msg << std::endl;
+          std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }  // end "telemetry" if
       } else {
@@ -159,7 +175,7 @@ int main() {
     std::cout << "Connected!!!" << std::endl;
   });
 
-  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code, 
+  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
                          char *message, size_t length) {
     ws.close();
     std::cout << "Disconnected" << std::endl;
@@ -172,6 +188,6 @@ int main() {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
   }
-  
+
   h.run();
 }

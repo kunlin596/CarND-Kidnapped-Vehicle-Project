@@ -26,23 +26,14 @@ using std::vector;
 using std::cout;
 using std::endl;
 
-namespace {
-Eigen::Isometry2d getIsometry2d(double x, double y, double radian) {
-  using namespace Eigen;
-  Isometry2d mat;
-  mat.linear() = Rotation2Dd(radian).toRotationMatrix();
-  mat.translation() = Vector2d(x, y);
-  return mat;
-}
-}
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
   /**
-   * TODO: Set the number of particles. Initialize all particles to 
+   * TODO: Set the number of particles. Initialize all particles to
    *   first position (based on estimates of x, y, theta and their uncertainties
-   *   from GPS) and all weights to 1. 
+   *   from GPS) and all weights to 1.
    * TODO: Add random Gaussian noise to each particle.
-   * NOTE: Consult particle_filter.h for more information about this method 
+   * NOTE: Consult particle_filter.h for more information about this method
    *   (and others in this file).
    */
   BOOST_LOG_TRIVIAL(info) << "Initializing particle filters.";
@@ -68,7 +59,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
                                 double velocity, double yaw_rate) {
   /**
    * TODO: Add measurements to each particle and add random Gaussian noise.
-   * NOTE: When adding noise you may find std::normal_distribution 
+   * NOTE: When adding noise you may find std::normal_distribution
    *   and std::default_random_engine useful.
    *  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
    *  http://www.cplusplus.com/reference/random/default_random_engine/
@@ -97,12 +88,12 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
 void ParticleFilter::dataAssociation(const vector<LandmarkObs> &predictedInWorld,
                                      const vector<LandmarkObs> &observations) {
   /**
-   * TODO: Find the predicted measurement that is closest to each 
-   *   observed measurement and assign the observed measurement to this 
-   *   particular landmark.
-   * NOTE: this method will NOT be called by the grading code. But you will 
-   *   probably find it useful to implement this method and use it as a helper 
+   * NOTE: this method will NOT be called by the grading code. But you will
+   *   probably find it useful to implement this method and use it as a helper
    *   during the updateWeights phase.
+   *
+   *   Data association is done in world frame.
+   *   Observations are transformed from car frame to world frame
    */
 
   BOOST_LOG_TRIVIAL(debug) << "Data association";
@@ -151,11 +142,8 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
                                    const vector<LandmarkObs> &observations,
                                    const Map &map_landmarks) {
   /**
-   * TODO: Update the weights of each particle using a multi-variate Gaussian
-   *   distribution. You can read more about this distribution here: 
-   *   https://en.wikipedia.org/wiki/Multivariate_normal_distribution
-   * NOTE: The observations are given in the VEHICLE'S coordinate system. 
-   *   Your particles are located according to the MAP'S coordinate system. 
+   * NOTE: The observations are given in the VEHICLE'S coordinate system.
+   *   Your particles are located according to the MAP'S coordinate system.
    *   You will need to transform between the two systems. Keep in mind that
    *   this transformation requires both rotation AND translation (but no scaling).
    *   The following is a good resource for the theory:
@@ -175,35 +163,25 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     obs.x = static_cast<double>(map_landmarks.landmark_list[i].x_f);
     obs.y = static_cast<double>(map_landmarks.landmark_list[i].y_f);
   }
+
   dataAssociation(predictedObservations, observations);
 
   // Update weights
   const Vector2d stddev = {std_landmark[0], std_landmark[1]};
   for (auto &p : particles) {
-    const Isometry2d Tcar2world = getIsometry2d(p.x, p.y, p.theta);
+    // const Isometry2d Tcar2world = getIsometry2d(p.x, p.y, p.theta);
     double &prob = p.weight;
     for (size_t i = 0; i < observations.size(); ++i) {
       const LandmarkObs &o = observations[i];
       const Map::single_landmark_s &nnLandmark = map_landmarks.landmark_list[p.associations[i]];
-
-      const Vector2d obsInCar = { o.x, o.y };
-      const Vector2d obsInMap = (Tcar2world * obsInCar.homogeneous()).topRows<2>();
-      const Vector2d lmInMap = Vector2f(nnLandmark.x_f, nnLandmark.y_f).cast<double>();
-      if ((lmInMap - obsInMap).norm() > sensor_range) {
-        continue;
-      }
-      prob *= computeLikelyhood(lmInMap, obsInMap, stddev);
+      const Vector2d observation = { o.x, o.y };
+      const Vector2d predictedObservation = Vector2f(nnLandmark.x_f, nnLandmark.y_f) .cast<double>() - Vector2d(p.x, p.y);
+      prob *= computeLikelyhood(observation, predictedObservation, stddev);
     }
   }
 }
 
 void ParticleFilter::resample() {
-  /**
-   * TODO: Resample particles with replacement with probability proportional 
-   *   to their weight. 
-   * NOTE: You may find std::discrete_distribution helpful here.
-   *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
-   */
   // Clear the old weights
   weights = vector<double>(num_particles);
 
@@ -222,19 +200,16 @@ void ParticleFilter::resample() {
   std::uniform_real_distribution<double> urd(0, 1.0);
   std::uniform_int_distribution<int> rid(0, num_particles - 1);
   int currindex = rid(gen);
-//  printf("initial currentindex=%d\n", currindex);
 
-  // Resampling the replace the old particle withe the new one
+  // Resampling the particles
   int newNumParticles= 0;
   vector<Particle> newParticles(particles.size());
   while (newNumParticles < num_particles) {
     double beta = urd(gen) * 2.0 * maxweight;
-//    printf("currindex=%d, beta=%.3f\n", currindex, beta);
     while ((beta - particles[currindex].weight) > 1e-6) {
       beta -= particles[currindex].weight;
       currindex = (currindex + 1) % num_particles;
     }
-    // Replace old particle with new one to re-use the memory
     newParticles[newNumParticles] = particles[currindex];
     ++newNumParticles;
   }
@@ -245,7 +220,7 @@ void ParticleFilter::setAssociations(Particle& particle,
                                      const vector<int>& associations,
                                      const vector<double>& sense_x,
                                      const vector<double>& sense_y) {
-  // particle: the particle to which assign each listed association, 
+  // particle: the particle to which assign each listed association,
   //   and association's (x,y) world coordinates mapping
   // associations: The landmark id that goes along with each listed association
   // sense_x: the associations x mapping already converted to world coordinates
