@@ -16,8 +16,12 @@ This repository includes two files that can be used to set up and install uWebSo
 Once the install for uWebSocketIO is complete, the main program can be built and ran by doing the following from the project top directory.
 
 ### Dependencies
-```boost
+```bash
 apt install libboost-dev-all libeigen3-dev
+```
+__Optional__
+```bash
+apt install libomp-dev
 ```
 
 ### Build
