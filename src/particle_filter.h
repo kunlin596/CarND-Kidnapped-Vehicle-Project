@@ -9,10 +9,11 @@
 #ifndef PARTICLE_FILTER_H_
 #define PARTICLE_FILTER_H_
 
+#include <eigen3/Eigen/Dense>
 #include <string>
 #include <vector>
+
 #include "helper_functions.h"
-#include <eigen3/Eigen/Dense>
 
 struct Particle {
   int id;
@@ -23,14 +24,39 @@ struct Particle {
   std::vector<int> associations;
   std::vector<double> sense_x;
   std::vector<double> sense_y;
-};
 
+  /**
+   * @brief      Update predicted landmark measurements
+   *
+   * @param[in]  map               The map
+   * @param[in]  sensorRange       The sensor range
+   * @param[in]  sensorStd         The sensor standard
+   * @param      validLandmarkIds  The indices of valid landmarks that are
+   * within the sensor range
+   */
+  std::pair<Eigen::Matrix2Xd, std::vector<int>> computePredictedObservations(
+      const Map &map, double sensorRange, const Eigen::Vector2d &sensorStd);
+
+  std::vector<int> observationAssociation(
+      const Eigen::Matrix2Xd &observationsInWorld,
+      const Eigen::Matrix2Xd &predictedObservationsInWorld);
+
+  void updateWeight(const Eigen::Matrix2Xd &observationsInWorld,
+                    const Eigen::Matrix2Xd &predictedLandmarks,
+                    const std::vector<int> &matchedIndices,
+                    const Eigen::Vector2d &sensorStd);
+
+  Eigen::Matrix2Xd computeObsvervationsInWorld(
+      const std::vector<LandmarkObs> &observations);
+};
 
 class ParticleFilter {
  public:
   // Constructor
   // @param num_particles Number of particles
-  ParticleFilter() : num_particles(0), is_initialized(false) {}
+  explicit ParticleFilter(int num_particles = 100)
+    : num_particles(num_particles)
+    , is_initialized(false) {}
 
   // Destructor
   ~ParticleFilter() {}
@@ -43,29 +69,21 @@ class ParticleFilter {
    * @param theta Initial orientation [rad]
    * @param std[] Array of dimension 3 [standard deviation of x [m],
    *   standard deviation of y [m], standard deviation of yaw [rad]]
+   * @param num_particles number of particles to be used
    */
-  void init(double x, double y, double theta, double std[]);
+  void init(double x, double y, double theta, const Eigen::Vector3d &std);
 
   /**
    * prediction Predicts the state for the next time step
    *   using the process model.
    * @param delta_t Time between time step t and t+1 in measurements [s]
-   * @param std_pos[] Array of dimension 3 [standard deviation of x [m],
+   * @param std_pose[] Array of dimension 3 [standard deviation of x [m],
    *   standard deviation of y [m], standard deviation of yaw [rad]]
    * @param velocity Velocity of car from t to t+1 [m/s]
    * @param yaw_rate Yaw rate of car from t to t+1 [rad/s]
    */
-  void prediction(double delta_t, double std_pos[], double velocity,
-                  double yaw_rate);
-
-  /**
-   * dataAssociation Finds which observations correspond to which landmarks
-   *   (likely by using a nearest-neighbors data association).
-   * @param predicted Vector of predicted landmark observations
-   * @param observations Vector of landmark observations
-   */
-  void dataAssociation(const std::vector<LandmarkObs> &predictedInWorld,
-                       const std::vector<LandmarkObs> &observations);
+  void prediction(double delta_t, const Eigen::Vector3d &std_pose,
+                  double velocity, double yaw_rate);
 
   /**
    * updateWeights Updates the weights for each particle based on the likelihood
@@ -76,7 +94,7 @@ class ParticleFilter {
    * @param observations Vector of landmark observations
    * @param map Map class containing map landmarks
    */
-  void updateWeights(double sensor_range, double std_landmark[],
+  void updateWeights(double sensor_range, const Eigen::Vector2d &std_landmark,
                      const std::vector<LandmarkObs> &observations,
                      const Map &map_landmarks);
 
@@ -92,16 +110,14 @@ class ParticleFilter {
    * This can be a very useful debugging tool to make sure transformations
    *   are correct and assocations correctly connected
    */
-  void setAssociations(Particle& particle, const std::vector<int>& associations,
-                       const std::vector<double>& sense_x,
-                       const std::vector<double>& sense_y);
+  void setAssociations(Particle &particle, const std::vector<int> &associations,
+                       const std::vector<double> &sense_x,
+                       const std::vector<double> &sense_y);
 
   /**
    * initialized Returns whether particle filter is initialized yet or not.
    */
-  bool initialized() const {
-    return is_initialized;
-  }
+  bool initialized() const { return is_initialized; }
 
   /**
    * Used for obtaining debugging information related to particles.
@@ -114,7 +130,7 @@ class ParticleFilter {
 
  private:
   // Number of particles to draw
-  int num_particles;
+  const int num_particles;
 
   // Flag, if filter is initialized
   bool is_initialized;
