@@ -8,6 +8,7 @@
 #include "particle_filter.h"
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <boost/format.hpp>
 #include <boost/log/trivial.hpp>
@@ -20,6 +21,9 @@
 #include <random>
 #include <string>
 #include <vector>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #include "helper_functions.h"
 
@@ -253,8 +257,14 @@ void ParticleFilter::updateWeights(double sensor_range,
   // BOOST_LOG_TRIVIAL(debug) << "Updating particle weights.";
   using Eigen::Isometry2d;
   using Eigen::Vector2f;
+  using namespace std::chrono;
 
   // Update sense_x, sense_y and associations.
+  auto start = high_resolution_clock::now();
+
+#ifdef _OPENMP
+  #pragma omp parallel for
+#endif
   for (size_t i = 0; i < particles.size(); ++i) {
     Particle &p = particles[i];
 
@@ -286,6 +296,9 @@ void ParticleFilter::updateWeights(double sensor_range,
 
     weights[i] = p.weight;
   }
+
+  auto elapsedTime = duration_cast<milliseconds>(high_resolution_clock::now() - start).count();
+  BOOST_LOG_TRIVIAL(debug) << "updateWeights took " << elapsedTime << " ms";
 }
 
 void ParticleFilter::resample() {

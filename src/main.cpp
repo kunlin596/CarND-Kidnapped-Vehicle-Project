@@ -53,7 +53,14 @@ int main() {
   }
 
   // Create particle filter
-  ParticleFilter pf(300);
+#ifdef _OPENMP
+  int num_particles = 500;
+  BOOST_LOG_TRIVIAL(info) << "Found OpenMP, set num_particles to 500";
+#else
+  int num_particles = 100;
+  BOOST_LOG_TRIVIAL(info) << "Set num_particles to 100";
+#endif
+  ParticleFilter pf(num_particles);
 
   h.onMessage([&pf, &map, &delta_t, &sensor_range, &sigma_pose,
                &sigma_landmark](uWS::WebSocket<uWS::SERVER> ws, char *data,
@@ -130,8 +137,8 @@ int main() {
           }
 
           // Update the weights and resample
-          BOOST_LOG_TRIVIAL(info)
-              << "Received new sensor measurements, will update particles.";
+          // BOOST_LOG_TRIVIAL(info)
+          //     << "Received new sensor measurements, will update particles.";
 
           /**
            * Update posterior probalities of all particles and update their
