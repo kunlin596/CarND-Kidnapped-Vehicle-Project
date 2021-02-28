@@ -6,4 +6,5 @@ solution
 solution_data
 src/particle_filter_sol.cpp
 src/solutions
+.idea
 # particle_filter.cpp
