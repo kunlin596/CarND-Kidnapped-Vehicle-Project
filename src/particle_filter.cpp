@@ -43,7 +43,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
   std::normal_distribution<double> y_d { y, std[1] };
   std::normal_distribution<double> s_d { theta, std[2] };
 
-  num_particles = 10;  // TODO: Set the number of particles
+  num_particles = 5;  // TODO: Set the number of particles
   particles = std::vector<Particle>(num_particles);
   for (int i = 0; i < num_particles; i++) {
     Particle &p = particles[i];
@@ -53,6 +53,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
     p.theta = s_d(gen);
     p.weight = 1.0 / static_cast<double>(num_particles);
   }
+  is_initialized = true;
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[],
@@ -64,24 +65,29 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
    *  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
    *  http://www.cplusplus.com/reference/random/default_random_engine/
    */
+  using std::sin;
+  using std::cos;
+
   BOOST_LOG_TRIVIAL(info) << "Run prediction.";
-  const double displacement = velocity * delta_t;
-  const double delta_yaw = yaw_rate * delta_t;
-  const double delta_x = std::cos(delta_yaw) * displacement;
-  const double delta_y = std::sin(delta_yaw) * displacement;
+  static std::random_device rd {};
+  static std::mt19937 gen { rd() };
+  static std::normal_distribution<double> x_d { 0.0, std_pos[0] };
+  static std::normal_distribution<double> y_d { 0.0, std_pos[1] };
+  static std::normal_distribution<double> s_d { 0.0, std_pos[2] };
 
-  std::random_device rd {};
-  std::mt19937 gen { rd() };
-
-  size_t i;
-  for (i = 0; i < particles.size(); ++i) {
+  for (size_t i = 0; i < particles.size(); ++i) {
     Particle &p = particles[i];
-    std::normal_distribution<double> x_d { p.x + delta_x, std_pos[0] };
-    std::normal_distribution<double> y_d { p.y + delta_y, std_pos[1] };
-    std::normal_distribution<double> s_d { p.theta + delta_yaw, std_pos[2] };
-    p.x = x_d(gen);
-    p.y = y_d(gen);
-    p.theta = s_d(gen);
+    if (0.0 < yaw_rate and yaw_rate < 1e-6) {
+      yaw_rate = 1e-6;
+    } else if (-1e-6 < yaw_rate and yaw_rate < 0.0) {
+      yaw_rate = -1e-6;
+    }
+    const double delta_yaw = yaw_rate * delta_t;
+    const double delta_x = velocity / yaw_rate * (sin(p.theta + delta_yaw) - sin(p.theta));
+    const double delta_y = velocity / yaw_rate * (cos(p.theta) - cos(p.theta + delta_yaw));
+    p.x += delta_x + x_d(gen);
+    p.y += delta_y + y_d(gen);
+    p.theta += delta_yaw + s_d(gen);
   }
 }
 
@@ -96,13 +102,12 @@ void ParticleFilter::dataAssociation(const vector<LandmarkObs> &predictedInWorld
    *   Observations are transformed from car frame to world frame
    */
 
-  BOOST_LOG_TRIVIAL(debug) << "Data association";
+  // BOOST_LOG_TRIVIAL(debug) << "Data association";
   using Eigen::Vector2d;
   using Eigen::Isometry2d;
 
   for (auto &p : particles) {
     p.associations.clear();
-    // FIXME: Better usage of memory
     vector<LandmarkObs> predictedPerParticle(predictedInWorld.size());
     std::copy(predictedInWorld.begin(), predictedInWorld.end(),
               std::back_inserter(predictedPerParticle));
@@ -111,7 +116,7 @@ void ParticleFilter::dataAssociation(const vector<LandmarkObs> &predictedInWorld
       // Find out the NN predictions
       int closest = -1;
       double minDist = std::numeric_limits<double>::infinity();
-      for (int i = 0; i < predictedPerParticle.size(); ++i) {
+      for (size_t i = 0; i < predictedPerParticle.size(); ++i) {
         Vector2d obsInWorld = (particleTransform * Vector2d(o.x, o.y).homogeneous()).topRows<2>();
         const double dist = (Vector2d(predictedPerParticle[i].x, predictedPerParticle[i].y) - obsInWorld).norm();
         if (dist < minDist) {
