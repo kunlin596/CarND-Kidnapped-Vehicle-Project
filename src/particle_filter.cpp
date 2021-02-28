@@ -122,8 +122,8 @@ void Particle::updateWeight(const Eigen::Matrix2Xd &observationsInWorld,
                             const Eigen::Matrix2Xd &predictedLandmarks,
                             const std::vector<int> &matchedIndices,
                             const Eigen::Vector2d &sensorStd) {
-  BOOST_LOG_TRIVIAL(debug)
-      << (boost::format(" --- Updating weight of particle %d --- ") % id).str();
+  // BOOST_LOG_TRIVIAL(debug)
+  //     << (boost::format(" --- Updating weight of particle %d --- ") % id).str();
 
   // Reset weight
   weight = 1.0;
@@ -134,15 +134,15 @@ void Particle::updateWeight(const Eigen::Matrix2Xd &observationsInWorld,
 
     const double likelihood = Gaussian(observation, predicted, sensorStd);
 
-    BOOST_LOG_TRIVIAL(debug)
-        << (boost::format("observation=%s, landmark=%s, likelihood=%.3e") %
-            observation.transpose() % predicted.transpose() % likelihood)
-               .str();
+    // BOOST_LOG_TRIVIAL(debug)
+    //     << (boost::format("observation=%s, landmark=%s, likelihood=%.3e") %
+    //         observation.transpose() % predicted.transpose() % likelihood)
+    //            .str();
     weight *= likelihood;
   }
 
-  BOOST_LOG_TRIVIAL(debug)
-      << (boost::format("Updating weight to %.3e") % weight).str();
+  // BOOST_LOG_TRIVIAL(debug)
+  //     << (boost::format("Updating weight to %.3e") % weight).str();
 }
 
 void ParticleFilter::init(double x, double y, double theta,
@@ -207,13 +207,13 @@ void ParticleFilter::prediction(double delta_t, const Eigen::Vector3d &std_pose,
     double delta_yaw = 0.0;
     double delta_x = 0.0;
     double delta_y = 0.0;
-    if (abs(yaw_rate) < 1e-6) {
+    if (abs(yaw_rate) < 1e-10) {
       delta_x = velocity * delta_t * cos(p.theta);
       delta_y = velocity * delta_t * sin(p.theta);
     } else {
+      delta_yaw = yaw_rate * delta_t;
       delta_x = velocity / yaw_rate * (sin(p.theta + delta_yaw) - sin(p.theta));
       delta_y = velocity / yaw_rate * (cos(p.theta) - cos(p.theta + delta_yaw));
-      delta_yaw = yaw_rate * delta_t;
     }
     p.x += delta_x + x_d(gen);
     p.y += delta_y + y_d(gen);
@@ -270,10 +270,15 @@ void ParticleFilter::updateWeights(double sensor_range,
     std::vector<int> matchedIndices =
         p.observationAssociation(observationsInWorld, predictedObservations);
 
+    // Update associations
     p.associations.clear();
+    p.sense_x.clear();
+    p.sense_y.clear();
     for (int matchedIndex : matchedIndices) {
       // +1 to output the landmark id
       p.associations.push_back(predictedLandmarkIndices[matchedIndex] + 1);
+      p.sense_x.push_back(predictedObservations.col(matchedIndex).x());
+      p.sense_y.push_back(predictedObservations.col(matchedIndex).y());
     }
 
     p.updateWeight(observationsInWorld, predictedObservations, matchedIndices,
@@ -290,34 +295,41 @@ void ParticleFilter::resample() {
   }
 
   VectorXd weights_ =
-      Eigen::Map<VectorXd>(weights.data(), weights.size(), 1).normalized();
-  double maxWeight = weights_.maxCoeff();
+      Eigen::Map<VectorXd>(weights.data(), weights.size(), 1);
+  weights_ /= weights_.sum();
 
-  cout << weights_.transpose() << endl;
+  // BOOST_LOG_TRIVIAL(info) << "Weights: " << weights_.transpose();
 
   // First index initialization
   std::default_random_engine gen;
   gen.seed(std::time(0));
-  std::uniform_real_distribution<> urd(0, 1.0);
+  std::uniform_real_distribution<> urd(0, 2.0 * weights_.maxCoeff());
   std::uniform_int_distribution<> rid(0, num_particles - 1);
 
   int sampledIndex = rid(gen);
 
   // Resampling the particles
   vector<Particle> newParticles(num_particles);
+  // Eigen::VectorXi samples(num_particles);
+  // samples[0] = sampledIndex;
+  newParticles[0] = particles[sampledIndex];
 
   double beta = 0.0;
-  for (int i = 0; i < weights_.size(); ++i) {
-    beta += urd(gen) * 2.0 * maxWeight;
-    while ((beta - weights_[sampledIndex]) > 1e-6) {
+
+  for (int i = 1; i < num_particles; ++i) {
+    beta += urd(gen);
+    while (weights_[sampledIndex] < beta) {
       beta -= weights_[sampledIndex];
-      sampledIndex = (sampledIndex + 1) % weights_.rows();
+      sampledIndex = (sampledIndex + 1) % num_particles;
     }
+    // samples[i] = sampledIndex; // DEBUG
     newParticles[i] = particles[sampledIndex];
+    newParticles[i].weight = weights_[sampledIndex];
     newParticles[i].id = i;
   }
 
   particles = newParticles;
+  // BOOST_LOG_TRIVIAL(info) << "samples: " << samples.transpose();
 }
 
 void ParticleFilter::setAssociations(Particle &particle,

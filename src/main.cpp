@@ -53,7 +53,7 @@ int main() {
   }
 
   // Create particle filter
-  ParticleFilter pf(5);
+  ParticleFilter pf(300);
 
   h.onMessage([&pf, &map, &delta_t, &sensor_range, &sigma_pose,
                &sigma_landmark](uWS::WebSocket<uWS::SERVER> ws, char *data,
@@ -190,7 +190,7 @@ int main() {
               pf.getSenseCoord(best_particle, "Y");
 
           auto msg = "42[\"best_particle\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          // BOOST_LOG_TRIVIAL(debug) << msg;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }  // end "telemetry" if
       } else {
